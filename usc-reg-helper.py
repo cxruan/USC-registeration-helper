@@ -42,12 +42,12 @@ class Course:
 			self.is_open = True;
 
 	def str(self,k):
+		# Verbose
 		if(k==1):
 			return "Session: "+self.session_+"\n"+self.type_+"\n"+self.time_+"\n"+self.days_+"\n"+self.instr_+"\n"+self.regSeats_+"\n\n"
+		# Logging
 		elif(k==2):
 			return "Session: "+self.session_+" "+self.regSeats_
-		else:
-			return "So such option"
 
 def land_in_coursebin():
 	opts = webdriver.ChromeOptions()
