@@ -1,12 +1,14 @@
-from selenium import webdriver
+import ast
 from bs4 import BeautifulSoup
-import time
-import logging
-import smtplib
+import configparser
 from email.header import Header
 from email.mime.text import MIMEText
-import configparser
-import ast
+import logging
+import requests
+from selenium import webdriver
+import smtplib
+import sys
+import time
 
 # Configuration
 cf = configparser.ConfigParser()
@@ -14,11 +16,30 @@ cf.read("./config.ini")
 sessions = ast.literal_eval(cf['session']['sessions'])
 usc_username = cf['usc']['usc_username']
 usc_password = cf['usc']['usc_password']
-smtp_server = cf['smtp']['smtp_server']
-smtp_user = cf['smtp']['smtp_user']
-smtp_password = cf['smtp']['smtp_password']
-from_addr = cf['email']['from_addr']
-to_addr = [cf['email']['to_addr']]
+if cf['mode']['mode'] == "smtp":
+	mode = 0
+	smtp_server = cf['smtp']['smtp_server']
+	smtp_user = cf['smtp']['smtp_user']
+	smtp_password = cf['smtp']['smtp_password']
+	from_addr = cf['email']['from_addr']
+	to_addr = [cf['email']['to_addr']]
+elif cf['mode']['mode'] == "ifttt":
+	mode = 1
+	event_name = cf['ifttt']['event_name']
+	key = cf['ifttt']['key']
+elif cf['mode']['mode'] == "both":
+	mode = 2
+	smtp_server = cf['smtp']['smtp_server']
+	smtp_user = cf['smtp']['smtp_user']
+	smtp_password = cf['smtp']['smtp_password']
+	from_addr = cf['email']['from_addr']
+	to_addr = [cf['email']['to_addr']]
+	event_name = cf['ifttt']['event_name']
+	key = cf['ifttt']['key']	
+else:
+	print("Invalid mode")
+	sys.exit(0)
+
 update_interval = int(cf['update_interval']['interval'])
 
 class Course:
@@ -28,9 +49,10 @@ class Course:
 	days_ = ""
 	instr_ = ""
 	regSeats_ = ""
-	is_open = False
+	prev_status = False
+	status = False
 
-	def __init__(self, session, soup_data):
+	def __init__(self, session, soup_data, prev_status):
 		target = soup_data.find(id="section_"+session).find(attrs={"style":"padding:0;border-top: solid 1px #F2F1F1;"})
 		self.session_ = session
 		self.type_ = target.find(class_="type_alt1").get_text() if target.find(class_="type_alt1") else target.find(class_="type_alt0").get_text()
@@ -38,8 +60,9 @@ class Course:
 		self.days_ = target.find(class_="days_alt1").get_text() if target.find(class_="days_alt1") else target.find(class_="days_alt0").get_text()
 		self.instr_ = target.find(class_="instr_alt1").get_text() if target.find(class_="instr_alt1") else target.find(class_="instr_alt0").get_text()
 		self.regSeats_ = target.find(class_="regSeats_alt1").get_text() if target.find(class_="regSeats_alt1") else target.find(class_="regSeats_alt0").get_text()
+		self.prev_status = prev_status
 		if not target.find(style="color:#ff0000 ;"):
-			self.is_open = True;
+			self.status = True;
 
 	def str(self,k):
 		# Verbose
@@ -93,6 +116,9 @@ def main():
 
 	while True:
 		browser = land_in_coursebin()
+		prev_statuses = {}
+		for session in sessions:
+			prev_statuses[session] = False
 		while True:
 			courses = []
 			content = ""
@@ -103,13 +129,26 @@ def main():
 				print("Cannot open Coursebin.\nReopenning...\n")
 				break
 			for session in sessions:
-				courses.append(Course(session,soup))
+				courses.append(Course(session,soup,prev_statuses[session]))
 			for course in courses:
-				if course.is_open:
+				prev_statuses[course.session_] = False
+				if course.status:
+					prev_statuses[course.session_] = True
+				if course.status and not course.prev_status:
 					content += course.str(1)
 				logger.info(course.str(2))
 			if content:
-				sendEmail(content, to_addr)
+				if mode == 0:
+					sendEmail(content, to_addr)
+				elif mode == 1:
+					api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(event_name, key)
+					r = requests.post(api_url, data={'value1': content})
+					print(r.text)
+				else:
+					sendEmail(content, to_addr)
+					api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(event_name, key)
+					r = requests.post(api_url, data={'value1': content})
+					print(r.text)					
 			print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
 			time.sleep(update_interval)
 			browser.refresh()
