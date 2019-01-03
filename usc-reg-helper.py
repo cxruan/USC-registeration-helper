@@ -131,10 +131,8 @@ def main():
 			for session in sessions:
 				courses.append(Course(session,soup,prev_statuses[session]))
 			for course in courses:
-				prev_statuses[course.session_] = False
-				if course.status:
-					prev_statuses[course.session_] = True
-				if course.status and not course.prev_status:
+				prev_statuses[course.session_] = True if course.status else False
+				if course.status != course.prev_status:
 					content += course.str(1)
 				logger.info(course.str(2))
 			if content:
