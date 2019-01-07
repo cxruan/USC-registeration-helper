@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 import ast
 from bs4 import BeautifulSoup
 import configparser
@@ -16,6 +17,21 @@ cf.read("./config.ini")
 sessions = ast.literal_eval(cf['session']['sessions'])
 usc_username = cf['usc']['usc_username']
 usc_password = cf['usc']['usc_password']
+logging_enabled  = cf.getboolean('logging','logging')
+
+if logging_enabled:
+	# Configure logging
+	logger = logging.getLogger()
+	logger.setLevel(logging.INFO)
+	rq = time.strftime('%Y%m%d%H%M', time.localtime(time.time()))
+	log_path = './logs/'
+	log_name = log_path + rq + '.log'
+	fh = logging.FileHandler(log_name, mode='w')
+	fh.setLevel(logging.DEBUG)
+	formatter = logging.Formatter("%(asctime)s - %(filename)s - %(levelname)s: %(message)s", '%Y-%m-%d %H:%M:%S')
+	fh.setFormatter(formatter)
+	logger.addHandler(fh)
+
 if cf['mode']['mode'] == "smtp":
 	mode = 0
 	smtp_server = cf['smtp']['smtp_server']
@@ -92,28 +108,20 @@ def sendEmail(content, to):
     message = MIMEText(content, 'plain', 'utf-8')
     message['From'] = "USC Webreg Helper <{}>".format(from_addr)
     message['To'] = ",".join(to)
-    message['Subject'] = "A course is open now! " + time.strftime('%H:%M:%S', time.localtime(time.time()))
+    message['Subject'] = "Section(s) Status Change " + time.strftime('%H:%M:%S', time.localtime(time.time()))
     try:
         smtpObj = smtplib.SMTP_SSL(smtp_server, 465)
         smtpObj.login(smtp_user, smtp_password)
         smtpObj.sendmail(from_addr, to, message.as_string())
-        print("Email has been send successfully.")
+        print("Email has been send successfully to " + to[0])
+        if logging_enabled:
+        	logger.info("Email has been send successfully to " + to[0])
     except smtplib.SMTPException as e:
-        print(e)	
+        print(e)
+        if logging_enabled:
+        	logger.warning(e)
 
 def main():
-	# Configure logging
-	logger = logging.getLogger()
-	logger.setLevel(logging.INFO)
-	rq = time.strftime('%Y%m%d%H%M', time.localtime(time.time()))
-	log_path = './logs/'
-	log_name = log_path + rq + '.log'
-	fh = logging.FileHandler(log_name, mode='w')
-	fh.setLevel(logging.DEBUG)
-	formatter = logging.Formatter("%(asctime)s - %(filename)s - %(levelname)s: %(message)s")
-	fh.setFormatter(formatter)
-	logger.addHandler(fh)
-
 	while True:
 		browser = land_in_coursebin()
 		prev_statuses = {}
@@ -127,6 +135,8 @@ def main():
 			if not soup.find(class_="content-wrapper-coursebin"):
 				browser.close()
 				print("Cannot open Coursebin.\nReopenning...\n")
+				if logging_enabled:
+					logger.warning("Cannot open Coursebin. Reopenning...")
 				break
 			for session in sessions:
 				courses.append(Course(session,soup,prev_statuses[session]))
@@ -134,7 +144,8 @@ def main():
 				prev_statuses[course.session_] = True if course.status else False
 				if course.status != course.prev_status:
 					content += course.str(1)
-				logger.info(course.str(2))
+				if logging_enabled:
+					logger.info(course.str(2))
 			if content:
 				if mode == 0:
 					sendEmail(content, to_addr)
@@ -142,12 +153,17 @@ def main():
 					api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(event_name, key)
 					r = requests.post(api_url, data={'value1': content})
 					print(r.text)
+					if logging_enabled:
+						logger.info(r.text)
 				else:
 					sendEmail(content, to_addr)
 					api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(event_name, key)
 					r = requests.post(api_url, data={'value1': content})
-					print(r.text)					
-			print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
+					print(r.text)
+					if logging_enabled:
+						logger.info(r.text)
 			time.sleep(update_interval)
 			browser.refresh()
-main()
+
+if __name__ == '__main__':
+	main()
