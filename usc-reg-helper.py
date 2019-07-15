@@ -57,7 +57,7 @@ class Course:
     instr_ = ""
     regSeats_ = ""
     prev_status = False
-    status = False
+    curr_status = False
 
     def __init__(self, session, soup_data, prev_status):
         target = soup_data.find(
@@ -77,18 +77,18 @@ class Course:
             class_="regSeats_alt1") else target.find(class_="regSeats_alt0").get_text()
         self.prev_status = prev_status
         if not target.find(style="color:#ff0000 ;"):
-            self.status = True
+            self.curr_status = True
 
     def __str__(self):
         return "Course: {}\nSession: {}\n{}\n{}\n{}\n{}\n{}\n\n".format(self.courseId_, self.session_, self.type_, self.time_, self.days_, self.instr_, self.regSeats_)
 
     def __repr__(self):
-        return "Course: {} Session: {} {}".format(self.courseId_, self.session_, self.regSeats_)
+        return "{} {} {} {}".format(self.session_, self.courseId_.replace(" ", ""), self.type_.lstrip("Type: "), self.regSeats_.lstrip("Registered: "))
 
 
 def land_in_coursebin():
     opts = webdriver.ChromeOptions()
-    # opts.add_argument('headless')
+    opts.add_argument('headless')
     browser = webdriver.Chrome(options=opts)
     browser.get('https://my.usc.edu/')
     username = browser.find_element_by_id('username')
@@ -103,19 +103,18 @@ def land_in_coursebin():
     return browser
 
 
-def sendEmail(content, to):
-    message = MIMEText(content, 'plain', 'utf-8')
-    message['From'] = "USC Webreg Helper <{}>".format(from_addr)
-    message['To'] = ",".join(to)
-    message['Subject'] = "Section(s) Status Change " + \
-        time.strftime('%H:%M:%S', time.localtime(time.time()))
+def sendEmail(econtent, efrom, eto, esubject):
+    message = MIMEText(econtent, 'plain', 'utf-8')
+    message['From'] = "USC Webreg Helper <{}>".format(efrom)
+    message['To'] = ",".join(eto)
+    message['Subject'] = esubject
     try:
         smtpObj = smtplib.SMTP_SSL(smtp_server, 465)
         smtpObj.login(smtp_user, smtp_password)
-        smtpObj.sendmail(from_addr, to, message.as_string())
-        print("Email has been send successfully to " + to[0])
+        smtpObj.sendmail(efrom, eto, message.as_string())
+        print("Email has been send successfully to " + eto[0])
         if logging_enabled:
-            logger.info("Email has been send successfully to " + to[0])
+            logger.info("Email has been send successfully to " + eto[0])
     except smtplib.SMTPException as e:
         print(e)
         if logging_enabled:
@@ -142,14 +141,18 @@ def main():
             for session in sessions:
                 courses.append(Course(session, soup, prev_statuses[session]))
             for course in courses:
-                prev_statuses[course.session_] = True if course.status else False
-                if course.status != course.prev_status:
-                    content += str(course)
+                prev_statuses[course.session_] = course.curr_status
                 if logging_enabled:
-                    logger.info(repr(course))
+                    if course.curr_status == True:
+                        logger.warning(repr(course))
+                    else:
+                        logger.info(repr(course))
+                if course.curr_status != course.prev_status:
+                    content += str(course)
             if content:
                 if mode == "smtp" or mode == "both":
-                    sendEmail(content, to_addr)
+                    sendEmail(content, from_addr, to_addr,
+                              "Status Change - USC Webreg Helper")
                 if mode == "ifttt" or mode == "both":
                     api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(
                         event_name, key)
