@@ -83,7 +83,7 @@ class Course:
         return "Course: {}\nSession: {}\n{}\n{}\n{}\n{}\n{}\n\n".format(self.courseId_, self.session_, self.type_, self.time_, self.days_, self.instr_, self.regSeats_)
 
     def __repr__(self):
-        return "{} {} {} {}".format(self.session_, self.courseId_.replace(" ", ""), self.type_.lstrip("Type: "), self.regSeats_.lstrip("Registered: "))
+        return "{} {} {} {}".format(self.regSeats_.lstrip("Registered: "), self.session_, self.courseId_.replace(" ", ""), self.type_.lstrip("Type: "))
 
 
 def land_in_coursebin():
