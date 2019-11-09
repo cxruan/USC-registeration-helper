@@ -1,0 +1,50 @@
+{
+    "settings": {
+        "general": {
+            "mode": "smtp",
+            "update_interval": 20
+        },
+        "usc": {
+            "term": "20201",
+            "usc_username": "",
+            "usc_password": ""
+        },
+        "smtp": {
+            "server": "",
+            "port": 465,
+            "user": "",
+            "password": "",
+            "from": "",
+            "to": ""
+        },
+        "ifttt": {
+            "event_name": "",
+            "key": ""
+        }
+    },
+    "sections_to_monitor": [
+        "31820"
+    ],
+    "recipes_to_enroll": [
+        {
+            "name": "register itp-125",
+            "conditions": {
+                "open": [
+                    "31820",
+                    "31821"
+                ],
+                "not_registered": [
+                    "31820",
+                    "31821"
+                ]
+            },
+            "action": {
+                "drop": [],
+                "register": [
+                    "31820",
+                    "31821"
+                ]
+            }
+        }
+    ]
+}

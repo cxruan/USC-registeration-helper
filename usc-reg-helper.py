@@ -1,167 +1,331 @@
 # -*- coding: UTF-8 -*-
-import ast
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
-import configparser
+import smtplib
 from email.header import Header
 from email.mime.text import MIMEText
-import logging
 import requests
-from selenium import webdriver
-import smtplib
-import sys
+import os
 import time
+import re
+import json
+
+with open('config.json') as f:
+    config = json.load(f)
 
 # Configuration
-cf = configparser.ConfigParser()
-cf.read("./config.ini")
-mode = cf['general']['mode']
-sessions = ast.literal_eval(cf['general']['sessions'])
-logging_enabled = cf.getboolean('general', 'logging')
-update_interval = int(cf['general']['update_interval'])
-term = cf['usc']['term']
-usc_username = cf['usc']['usc_username']
-usc_password = cf['usc']['usc_password']
-event_name = cf['ifttt']['event_name']
-key = cf['ifttt']['key']
-smtp_server = cf['smtp']['smtp_server']
-smtp_user = cf['smtp']['smtp_user']
-smtp_password = cf['smtp']['smtp_password']
-from_addr = cf['smtp']['from_addr']
-to_addr = [cf['smtp']['to_addr']]
-
-if logging_enabled:
-    # Configure logging
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    rq = time.strftime('%Y%m%d%H%M', time.localtime(time.time()))
-    log_path = './logs/'
-    log_name = log_path + rq + '.log'
-    fh = logging.FileHandler(log_name, mode='w')
-    fh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(filename)s - %(levelname)s: %(message)s", '%Y-%m-%d %H:%M:%S')
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-
-if not (mode == "ifttt" or mode == "smtp" or mode == "both"):
-    print("Invalid mode")
-    sys.exit(0)
+MODE = config["settings"]['general']['mode']
+UPDATE_INTERVAL = config["settings"]['general']['update_interval']
+USC_TERM = config["settings"]['usc']['term']
+USC_USERNAME = config["settings"]['usc']['usc_username']
+USC_PASSWORD = config["settings"]['usc']['usc_password']
+IFTTT_EVENT_NAME = config["settings"]['ifttt']['event_name']
+IFTTT_KEY = config["settings"]['ifttt']['key']
+SMTP_SERVER = config["settings"]['smtp']['server']
+SMTP_PORT = config["settings"]['smtp']['port']
+SMTP_USERNAME = config["settings"]['smtp']['user']
+SMTP_PASSWORD = config["settings"]['smtp']['password']
+SMTP_FROM = config["settings"]['smtp']['from']
+SMTP_TO = [config["settings"]['smtp']['to']]
+SECTIONS_TO_MONITOR = set(config['sections_to_monitor'])
+SECTIONS_TO_ENROLL = []
+for recipe in config['recipes_to_enroll']:
+    SECTIONS_TO_ENROLL += recipe['conditions'].get('open', [])
+    SECTIONS_TO_ENROLL += recipe['conditions'].get('closed', [])
+    SECTIONS_TO_ENROLL += recipe['conditions'].get('registered', [])
+    SECTIONS_TO_ENROLL += recipe['conditions'].get('not_registered', [])
+SECTIONS_TO_ENROLL = set(SECTIONS_TO_ENROLL)
 
 
 class Course:
-    courseId_ = ""
-    session_ = ""
-    type_ = ""
-    time_ = ""
-    days_ = ""
-    instr_ = ""
-    regSeats_ = ""
-    prev_status = False
-    curr_status = False
+    courseId = ""
+    section = ""
+    courseType = ""
+    time = ""
+    days = ""
+    instructor = ""
+    regSeats = ""
+    opened = False
+    openChanged = False
+    registered = False
+    scheduled = False
 
-    def __init__(self, session, soup_data, prev_status):
-        target = soup_data.find(
-            id="section_"+session).find(attrs={"style": "padding:0;border-top: solid 1px #F2F1F1;"})
-        self.courseId_ = target.parent.parent.find_previous_sibling(
+    def __init__(self, section):
+        self.section = section
+
+    def status_update(self, soup):
+        target = soup.find(
+            id="section_" +
+            self.section).find(
+            attrs={
+                "style": "padding:0;border-top: solid 1px #F2F1F1;"})
+        self.courseId = target.parent.parent.find_previous_sibling(
             attrs={"data-parent": "#accordion"}).find(class_="crsID").get_text().rstrip(": ")
-        self.session_ = session
-        self.type_ = target.find(class_="type_alt1").get_text() if target.find(
+        self.courseType = target.find(class_="type_alt1").get_text() if target.find(
             class_="type_alt1") else target.find(class_="type_alt0").get_text()
-        self.time_ = target.find(class_="hours_alt1").get_text() if target.find(
+        self.time = target.find(class_="hours_alt1").get_text() if target.find(
             class_="hours_alt1") else target.find(class_="hours_alt0").get_text()
-        self.days_ = target.find(class_="days_alt1").get_text() if target.find(
+        self.days = target.find(class_="days_alt1").get_text() if target.find(
             class_="days_alt1") else target.find(class_="days_alt0").get_text()
-        self.instr_ = target.find(class_="instr_alt1").get_text() if target.find(
+        self.instructor = target.find(class_="instr_alt1").get_text() if target.find(
             class_="instr_alt1") else target.find(class_="instr_alt0").get_text()
-        self.regSeats_ = target.find(class_="regSeats_alt1").get_text() if target.find(
+        self.regSeats = target.find(class_="regSeats_alt1").get_text() if target.find(
             class_="regSeats_alt1") else target.find(class_="regSeats_alt0").get_text()
-        self.prev_status = prev_status
-        if not target.find(style="color:#ff0000 ;"):
-            self.curr_status = True
-
-    def __str__(self):
-        return "Course: {}\nSession: {}\n{}\n{}\n{}\n{}\n{}\n\n".format(self.courseId_, self.session_, self.type_, self.time_, self.days_, self.instr_, self.regSeats_)
-
-    def __repr__(self):
-        return "{} {} {} {}".format(self.regSeats_.lstrip("Registered: "), self.session_, self.courseId_.replace(" ", ""), self.type_.lstrip("Type: "))
+        oldOpened = self.opened
+        self.opened = False if target.find(style="color:#ff0000 ;") else True
+        self.openChanged = False if oldOpened == self.opened else True
+        active_button = target.find(class_="schUnschRmv", style="display: block;")
+        self.registered = False if active_button.get("id")[7:11] == "regN" else True
+        self.scheduled = False if active_button.get("id")[0:6] == "schedN" else True
 
 
 def land_in_coursebin():
-    opts = webdriver.ChromeOptions()
-    opts.add_argument('headless')
-    browser = webdriver.Chrome(options=opts)
+    chrome_options = webdriver.ChromeOptions()
+    chrome_bin = os.environ.get("GOOGLE_CHROME_BIN")
+    if chrome_bin:
+        chrome_options.binary_location = chrome_bin
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    browser = webdriver.Chrome(chrome_options=chrome_options)
     browser.get('https://my.usc.edu/')
     username = browser.find_element_by_id('username')
-    username.send_keys(usc_username)
+    username.send_keys(USC_USERNAME)
     password = browser.find_element_by_id('password')
-    password.send_keys(usc_password)
+    password.send_keys(USC_PASSWORD)
     button = browser.find_element_by_name('_eventId_proceed')
     button.click()
     browser.get('https://my.usc.edu/portal/oasis/webregbridge.php')
-    browser.get('https://webreg.usc.edu/Terms/termSelect?term='+term)
+    browser.get('https://webreg.usc.edu/Terms/termSelect?term=' + USC_TERM)
     browser.get('https://webreg.usc.edu/myCourseBin')
     return browser
 
 
-def sendEmail(econtent, efrom, eto, esubject):
+def register(browser, test=False):
+    browser.get('https://webreg.usc.edu/Register')
+    if not test:
+        browser.find_element_by_name('btnSubmit').click()
+        WebDriverWait(browser, 10).until(ec.visibility_of_element_located(
+            (By.CLASS_NAME, 'content-wrapper-regconfirm')))
+        status = "Success" if BeautifulSoup(browser.page_source, "html.parser").find(
+            string=re.compile("Your transaction was successful:")) else "Failed"
+    else:
+        status = "Test"
+    return (browser, status)
+
+
+def satisfy_recipe(recipe, courses):
+    for section in recipe['conditions'].get('open', []):
+        if section not in courses or not courses[section].opened:
+            return False
+    for section in recipe['conditions'].get('closed', []):
+        if section not in courses or courses[section].opened:
+            return False
+    for section in recipe['conditions'].get('registered', []):
+        if section not in courses or not courses[section].registered:
+            return False
+    for section in recipe['conditions'].get('not_registered', []):
+        if section not in courses or courses[section].registered:
+            return False
+    return True
+
+
+def all_activated_recipes(recipes, courses, failed_recipes):
+    results = []
+    for recipe in recipes:
+        satisfied = satisfy_recipe(recipe, courses)
+        if satisfied and recipe['name'] not in failed_recipes:
+            results.append(recipe)
+    return results
+
+
+def check_schedule(course, checkout, browser):
+    to_drop = False
+    if course.registered:
+        if course.section in checkout.get('drop', []):
+            to_drop = True
+            if course.scheduled:
+                browser.find_element_by_css_selector(
+                    """a[data-ajax-complete="procschedNregY('""" + course.section + """')"]""").click()
+                WebDriverWait(
+                    browser, 10).until(
+                    ec.visibility_of_element_located(
+                        (By.CSS_SELECTOR, """a[data-ajax-complete="procschedYregY('""" + course.section + """')"]""")))
+        else:
+            if not course.scheduled:
+                browser.find_element_by_css_selector(
+                    """a[data-ajax-complete="procschedYregY('""" + course.section + """')"]""").click()
+                WebDriverWait(
+                    browser, 10).until(
+                    ec.visibility_of_element_located(
+                        (By.CSS_SELECTOR, """a[data-ajax-complete="procschedNregY('""" + course.section + """')"]""")))
+    else:
+        if course.section in checkout.get('register', []):
+            if not course.scheduled:
+                browser.find_element_by_css_selector(
+                    """a[data-ajax-complete="procschedYregN('""" + course.section + """')"] """).click()
+                WebDriverWait(
+                    browser, 10).until(
+                    ec.visibility_of_element_located(
+                        (By.CSS_SELECTOR, """a[data-ajax-complete="procschedNregN('""" + course.section + """')"]""")))
+        else:
+            if course.scheduled:
+                browser.find_element_by_css_selector(
+                    """a[data-ajax-complete="procschedNregN('""" + course.section + """')"]""").click()
+                WebDriverWait(
+                    browser, 10).until(
+                    ec.visibility_of_element_located(
+                        (By.CSS_SELECTOR, """a[data-ajax-complete="procschedYregN('""" + course.section + """')"]""")))
+    return to_drop
+
+
+def get_activated_courses(soup):
+    monitored_courses = []
+    recipe_courses = {}
+    for course_soup in soup.find_all(style="padding:0;border-top: solid 1px #F2F1F1;"):
+        section = course_soup.parent["id"].split('_')[1]
+        if section in SECTIONS_TO_MONITOR:
+            monitored_courses.append(Course(section))
+        if section in SECTIONS_TO_ENROLL:
+            recipe_courses[section] = Course(section)
+    return (monitored_courses, recipe_courses)
+
+
+def monitor_message(course, verbose=False):
+    if verbose:
+        msg = '========Monitor Information=======\n'
+        msg += "Course: {}\nSection: {}\n{}\n{}\n{}\n{}\n{}".format(
+            course.courseId,
+            course.section,
+            course.courseType,
+            course.time,
+            course.days,
+            course.instructor,
+            course.regSeats)
+    else:
+        msg = "{} {} {} {}".format(
+            course.regSeats.lstrip("Registered: "),
+            course.section,
+            course.courseId.replace(" ", ""),
+            course.courseType.lstrip("Type: "))
+    return msg
+
+
+def recipe_message(recipe, status, courses, verbose=False):
+    if verbose:
+        msg = '========Recipe Information========\n'
+        msg += "Recipe: " + recipe['name'] + '\n'
+        if recipe['action']['register']:
+            msg += "Register:\n"
+            for section in recipe['action'].get('register', []):
+                msg += "#{secion_id} {course_id:10s} {type}".format(
+                    secion_id=courses[section].section,
+                    type=courses[section].courseType,
+                    course_id=courses[section].courseId) + '\n'
+        if recipe['action']['drop']:
+            msg += "Drop:\n"
+            for section in recipe['action'].get('drop', []):
+                msg += "#{secion_id} {course_id:10s} {type}".format(
+                    secion_id=courses[section].section,
+                    type=courses[section].courseType,
+                    course_id=courses[section].courseId) + '\n'
+        msg += "Status: " + str(status) + '\n'
+    else:
+        msg = recipe['name'] + ' : ' + str(status)
+    return msg
+
+
+def send_email(econtent, efrom, eto, esubject):
     message = MIMEText(econtent, 'plain', 'utf-8')
     message['From'] = "USC Webreg Helper <{}>".format(efrom)
     message['To'] = ",".join(eto)
     message['Subject'] = esubject
     try:
-        smtpObj = smtplib.SMTP_SSL(smtp_server, 465)
-        smtpObj.login(smtp_user, smtp_password)
+        smtpObj = smtplib.SMTP_SSL(SMTP_SERVER, int(SMTP_PORT))
+        smtpObj.login(SMTP_USERNAME, SMTP_PASSWORD)
         smtpObj.sendmail(efrom, eto, message.as_string())
         print("Email has been send successfully to " + eto[0])
-        if logging_enabled:
-            logger.info("Email has been send successfully to " + eto[0])
     except smtplib.SMTPException as e:
         print(e)
-        if logging_enabled:
-            logger.warning(e)
 
 
 def main():
-    while True:
-        browser = land_in_coursebin()
-        prev_statuses = {}
-        for session in sessions:
-            prev_statuses[session] = False
-        while True:
-            courses = []
-            content = ""
+    _tries = 8
+    _delay = 30
+    _backoff = 2
+    while _tries:
+        try:
+            browser = land_in_coursebin()
             soup = BeautifulSoup(browser.page_source, "html.parser")
-            # Reopen coursebin if not loaded successfully
-            if not soup.find(class_="content-wrapper-coursebin"):
-                browser.close()
-                print("Cannot open Coursebin.\nReopenning...\n")
-                if logging_enabled:
-                    logger.warning("Cannot open Coursebin. Reopenning...")
-                break
-            for session in sessions:
-                courses.append(Course(session, soup, prev_statuses[session]))
-            for course in courses:
-                prev_statuses[course.session_] = course.curr_status
-                if logging_enabled:
-                    if course.curr_status == True:
-                        logger.warning(repr(course))
-                    else:
-                        logger.info(repr(course))
-                if course.curr_status != course.prev_status:
-                    content += str(course)
-            if content:
-                if mode == "smtp" or mode == "both":
-                    sendEmail(content, from_addr, to_addr,
-                              "Status Change - USC Webreg Helper")
-                if mode == "ifttt" or mode == "both":
-                    api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(
-                        event_name, key)
-                    r = requests.post(api_url, data={'value1': content})
-                    print(r.text)
-                    if logging_enabled:
-                        logger.info(r.text)
-            time.sleep(update_interval)
-            browser.refresh()
+            monitored_courses, recipe_courses = get_activated_courses(soup)
+            failed_recipes = set()
+            while True:
+                content = ""
+                soup = BeautifulSoup(browser.page_source, "html.parser")
+                # Reopen coursebin if not loaded successfully
+                if not soup.find(class_="content-wrapper-coursebin"):
+                    browser.close()
+                    print("Cannot open Coursebin.\nReopenning...\n")
+                    break
+                # Failed Recipes
+                if len(failed_recipes) != 0:
+                    print("failed recipes:", end=" ")
+                    print(list(failed_recipes))
+                # Status Update
+                for course in recipe_courses.values():
+                    course.status_update(soup)
+                for course in monitored_courses:
+                    course.status_update(soup)
+                # Courses Monitoring
+                for course in monitored_courses:
+                    print(monitor_message(course, False))
+                    if course.openChanged:
+                        content += monitor_message(course, True) + '\n\n'
+                # Courses Enrolling
+                activated_recipes = all_activated_recipes(config['recipes_to_enroll'], recipe_courses, failed_recipes)
+                for recipe in activated_recipes:
+                    dropped_set = set()
+                    for section, course in recipe_courses.items():
+                        to_drop = check_schedule(course, recipe['action'], browser)
+                        if to_drop:
+                            dropped_set.add(section)
+                    browser, status = register(browser, False)
+                    print(recipe_message(recipe, status, recipe_courses, False))
+                    content += recipe_message(recipe, status, recipe_courses, True) + '\n\n'
+                    if status == "Failed":
+                        failed_recipes.add(recipe['name'])
+                    elif status == "Success":
+                        for dropped in dropped_set:
+                            if dropped in recipe_courses.keys():
+                                recipe_courses.pop(dropped)
+                            for i in range(len(monitored_courses)):
+                                if monitored_courses[i].section == dropped:
+                                    monitored_courses.pop(i)
+                if content:
+                    if MODE == "smtp" or MODE == "both":
+                        send_email(content, SMTP_FROM, SMTP_TO, "Status Change - USC Webreg Helper")
+                    if MODE == "ifttt" or MODE == "both":
+                        api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(IFTTT_EVENT_NAME, IFTTT_KEY)
+                        r = requests.post(api_url, data={'value1': content})
+                        print(r.text)
+                print("------------------------------")
+                time.sleep(UPDATE_INTERVAL)
+                browser.get('https://webreg.usc.edu/myCourseBin')
+        except TimeoutException as e:
+            _tries -= 1
+            if not _tries:
+                raise
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print(e)
+            print("Left tries: {}. Scheduled restart in {} minutes".format(_tries, _delay / 60))
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            time.sleep(_delay)
+            _delay *= _backoff
 
 
 if __name__ == '__main__':
