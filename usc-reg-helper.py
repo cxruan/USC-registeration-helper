@@ -14,8 +14,7 @@ import time
 import re
 import json
 
-with open('config.json') as f:
-    config = json.load(f)
+config = json.loads(os.environ.get("CONFIG"))
 
 # Configuration
 MODE = config["settings"]['general']['mode']
@@ -39,6 +38,7 @@ for recipe in config['recipes_to_enroll']:
     SECTIONS_TO_ENROLL += recipe['conditions'].get('registered', [])
     SECTIONS_TO_ENROLL += recipe['conditions'].get('not_registered', [])
 SECTIONS_TO_ENROLL = set(SECTIONS_TO_ENROLL)
+PEOPLE_SECTIONS_DIC = config.get('people_sections_dic', {})
 
 
 class Course:
@@ -92,14 +92,16 @@ def land_in_coursebin():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--remote-debugging-port=9222")
-    browser = webdriver.Chrome(chrome_options=chrome_options)
+    browser = webdriver.Chrome(options=chrome_options)
     browser.get('https://my.usc.edu/')
+    WebDriverWait(browser, 10).until(ec.visibility_of_element_located((By.CLASS_NAME, 'page-wrapper')))
     username = browser.find_element_by_id('username')
     username.send_keys(USC_USERNAME)
     password = browser.find_element_by_id('password')
     password.send_keys(USC_PASSWORD)
     button = browser.find_element_by_name('_eventId_proceed')
     button.click()
+    WebDriverWait(browser, 10).until(ec.visibility_of_element_located((By.CLASS_NAME, 'service-header')))
     browser.get('https://my.usc.edu/portal/oasis/webregbridge.php')
     browser.get('https://webreg.usc.edu/Terms/termSelect?term=' + USC_TERM)
     browser.get('https://webreg.usc.edu/myCourseBin')
@@ -286,6 +288,10 @@ def main():
                     print(monitor_message(course, False))
                     if course.openChanged:
                         content += monitor_message(course, True) + '\n\n'
+                        for people, sections in PEOPLE_SECTIONS_DIC.items():
+                            if course.section in sections:
+                                send_email(monitor_message(course, True) +
+                                           '\n\n', SMTP_FROM, [people], "Status Change - USC Webreg Helper")
                 # Courses Enrolling
                 activated_recipes = all_activated_recipes(config['recipes_to_enroll'], recipe_courses, failed_recipes)
                 for recipe in activated_recipes:
@@ -321,7 +327,7 @@ def main():
             if not _tries:
                 raise
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            print(e)
+            print(e.msg)
             print("Left tries: {}. Scheduled restart in {} minutes".format(_tries, _delay / 60))
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
             time.sleep(_delay)

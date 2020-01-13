@@ -1,0 +1,24 @@
+{
+  "name": "USC Registeration Helper",
+  "repository": "https://github.com/cxruan/USC-registeration-helper",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    },
+    {
+      "url": "https://github.com/heroku/heroku-buildpack-google-chrome"
+    },
+    {
+      "url": "https://github.com/heroku/heroku-buildpack-chromedriver"
+    }
+  ],
+  "env": {
+    "GOOGLE_CHROME_BIN": {
+      "description": "The path of the Google Chrome executable",
+      "value": "/app/.apt/usr/bin/google-chrome"
+    },
+    "CONFIG": {
+      "description": "The config for running the software"
+    }
+  }
+}

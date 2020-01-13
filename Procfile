@@ -1,0 +1,1 @@
+worker: python usc-reg-helper.py
