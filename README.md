@@ -1,4 +1,4 @@
 # USC-registeration-helper
 An automation tool to monitor and enroll classes under USC WebReg system
 
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/cxruan/USC-registeration-helper)
