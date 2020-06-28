@@ -289,9 +289,14 @@ def main():
                 content += monitor_message(course, True) + '\n\n'
                 for people, sections in PEOPLE_SECTIONS_DIC.items():
                     if course.section in sections:
-                        print(f" {people}")
+                        print(f" {people}", end="")
                         send_email(monitor_message(course, True) + '\n\n', SMTP_FROM,
                                    [people], "Status Change - USC Webreg Helper")
+                print()
+            else:
+                for people, sections in PEOPLE_SECTIONS_DIC.items():
+                    if course.section in sections:
+                        print(f" {people}", end="")
                 print()
 
         # Courses Enrolling
