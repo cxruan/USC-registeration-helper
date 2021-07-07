@@ -262,81 +262,81 @@ def send_email(econtent, efrom, eto, esubject):
 
 
 def main():
-    _tries = 8
-    _delay = 30
-    _backoff = 2
-    while _tries:
-        try:
-            browser = land_in_coursebin()
-            soup = BeautifulSoup(browser.page_source, "html.parser")
-            monitored_courses, recipe_courses = get_activated_courses(soup)
-            failed_recipes = set()
-            while True:
-                content = ""
-                soup = BeautifulSoup(browser.page_source, "html.parser")
-                # Reopen coursebin if not loaded successfully
-                if not soup.find(class_="content-wrapper-coursebin"):
-                    browser.close()
-                    print("Cannot open Coursebin.\nReopenning...\n")
-                    break
-                # Failed Recipes
-                if len(failed_recipes) != 0:
-                    print("failed recipes:", end=" ")
-                    print(list(failed_recipes))
-                # Status Update
-                for course in recipe_courses.values():
-                    course.status_update(soup)
-                for course in monitored_courses:
-                    course.status_update(soup)
-                # Courses Monitoring
-                for course in monitored_courses:
-                    print(monitor_message(course, False))
-                    if course.openChanged:
-                        content += monitor_message(course, True) + '\n\n'
-                        for people, sections in PEOPLE_SECTIONS_DIC.items():
-                            if course.section in sections:
-                                send_email(monitor_message(course, True) +
-                                           '\n\n', SMTP_FROM, [people], "Status Change - USC Webreg Helper")
-                # Courses Enrolling
-                activated_recipes = all_activated_recipes(config['recipes_to_enroll'], recipe_courses, failed_recipes)
-                for recipe in activated_recipes:
-                    dropped_set = set()
-                    for section, course in recipe_courses.items():
-                        to_drop = check_schedule(course, recipe['action'], browser)
-                        if to_drop:
-                            dropped_set.add(section)
-                    browser, status = register(browser, False)
-                    print(recipe_message(recipe, status, recipe_courses, False))
-                    content += recipe_message(recipe, status, recipe_courses, True) + '\n\n'
-                    if status == "Failed":
-                        failed_recipes.add(recipe['name'])
-                    elif status == "Success":
-                        for dropped in dropped_set:
-                            if dropped in recipe_courses.keys():
-                                recipe_courses.pop(dropped)
-                            for i in range(len(monitored_courses)):
-                                if monitored_courses[i].section == dropped:
-                                    monitored_courses.pop(i)
-                if content:
-                    if MODE == "smtp" or MODE == "both":
-                        send_email(content, SMTP_FROM, SMTP_TO, "Status Change - USC Webreg Helper")
-                    if MODE == "ifttt" or MODE == "both":
-                        api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(IFTTT_EVENT_NAME, IFTTT_KEY)
-                        r = requests.post(api_url, data={'value1': content})
-                        print(r.text)
-                print("------------------------------")
-                time.sleep(UPDATE_INTERVAL)
-                browser.get('https://webreg.usc.edu/myCourseBin')
-        except TimeoutException as e:
-            _tries -= 1
-            if not _tries:
-                raise
-            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            print(e.msg)
-            print("Left tries: {}. Scheduled restart in {} minutes".format(_tries, _delay / 60))
-            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            time.sleep(_delay)
-            _delay *= _backoff
+    browser = land_in_coursebin()
+    soup = BeautifulSoup(browser.page_source, "html.parser")
+    monitored_courses, recipe_courses = get_activated_courses(soup)
+    failed_recipes = set()
+    while True:
+        content = ""
+        soup = BeautifulSoup(browser.page_source, "html.parser")
+
+        # Reopen coursebin if not loaded successfully
+        if not soup.find(class_="content-wrapper-coursebin"):
+            browser.close()
+            print("Cannot open Coursebin.\nReopenning...\n")
+            break
+
+        # Failed Recipes
+        if len(failed_recipes) != 0:
+            print("failed recipes:", end=" ")
+            print(list(failed_recipes))
+
+        # Status Update
+        for course in recipe_courses.values():
+            course.status_update(soup)
+        for course in monitored_courses:
+            course.status_update(soup)
+
+        # Courses Monitoring
+        for course in monitored_courses:
+            print(monitor_message(course, False), end=" ->")
+            if course.openChanged:
+                content += monitor_message(course, True) + '\n\n'
+                for people, sections in PEOPLE_SECTIONS_DIC.items():
+                    if course.section in sections:
+                        print(f" {people}", end="")
+                        send_email(monitor_message(course, True) + '\n\n', SMTP_FROM,
+                                   [people], "Status Change - USC Webreg Helper")
+                print()
+            else:
+                for people, sections in PEOPLE_SECTIONS_DIC.items():
+                    if course.section in sections:
+                        print(f" {people}", end="")
+                print()
+
+        # Courses Enrolling
+        activated_recipes = all_activated_recipes(
+            config['recipes_to_enroll'], recipe_courses, failed_recipes)
+        for recipe in activated_recipes:
+            dropped_set = set()
+            for section, course in recipe_courses.items():
+                to_drop = check_schedule(course, recipe['action'], browser)
+                if to_drop:
+                    dropped_set.add(section)
+            browser, status = register(browser, False)
+            print(recipe_message(recipe, status, recipe_courses, False))
+            content += recipe_message(recipe, status,
+                                      recipe_courses, True) + '\n\n'
+            if status == "Failed":
+                failed_recipes.add(recipe['name'])
+            elif status == "Success":
+                for dropped in dropped_set:
+                    if dropped in recipe_courses.keys():
+                        recipe_courses.pop(dropped)
+                    for i in range(len(monitored_courses)):
+                        if monitored_courses[i].section == dropped:
+                            monitored_courses.pop(i)
+
+        if content:
+            if MODE == "smtp" or MODE == "both":
+                send_email(content, SMTP_FROM, SMTP_TO, "Status Change - USC Webreg Helper")
+            if MODE == "ifttt" or MODE == "both":
+                api_url = "https://maker.ifttt.com/trigger/{}/with/key/{}".format(IFTTT_EVENT_NAME, IFTTT_KEY)
+                r = requests.post(api_url, data={'value1': content})
+                print(r.text)
+        print("------------------------------")
+        time.sleep(UPDATE_INTERVAL)
+        browser.get('https://webreg.usc.edu/myCourseBin')
 
 
 if __name__ == '__main__':
