@@ -32,11 +32,16 @@ SMTP_FROM = config["settings"]['smtp']['from']
 SMTP_TO = [config["settings"]['smtp']['to']]
 SECTIONS_TO_MONITOR = set(config['sections_to_monitor'])
 SECTIONS_TO_ENROLL = []
+
+print("---------- Recipes -----------")
 for recipe in config['recipes_to_enroll']:
     SECTIONS_TO_ENROLL += recipe['conditions'].get('open', [])
     SECTIONS_TO_ENROLL += recipe['conditions'].get('closed', [])
     SECTIONS_TO_ENROLL += recipe['conditions'].get('registered', [])
     SECTIONS_TO_ENROLL += recipe['conditions'].get('not_registered', [])
+    print(recipe)
+print("------------------------------")
+
 SECTIONS_TO_ENROLL = set(SECTIONS_TO_ENROLL)
 PEOPLE_SECTIONS_DIC = config.get('people_sections_dic', {})
 
