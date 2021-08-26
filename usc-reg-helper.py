@@ -257,7 +257,7 @@ def send_email(econtent, efrom, eto, esubject):
         smtpObj = smtplib.SMTP_SSL(SMTP_SERVER, int(SMTP_PORT))
         smtpObj.login(SMTP_USERNAME, SMTP_PASSWORD)
         smtpObj.sendmail(efrom, eto, message.as_string())
-        print("Email has been send successfully to " + eto[0])
+        print("Email has been sent successfully to " + eto[0])
     except smtplib.SMTPException as e:
         print(e)
 
@@ -295,7 +295,7 @@ def main():
                 content += monitor_message(course, True) + '\n\n'
                 for people, sections in PEOPLE_SECTIONS_DIC.items():
                     if course.section in sections:
-                        print(f" {people}", end="")
+                        print(f" {people}")
                         send_email(monitor_message(course, True) + '\n\n', SMTP_FROM,
                                    [people], "Status Change - USC Webreg Helper")
                 print()
