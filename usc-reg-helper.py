@@ -19,6 +19,7 @@ config = json.loads(os.environ.get("CONFIG"))
 # Configuration
 MODE = config["settings"]['general']['mode']
 UPDATE_INTERVAL = config["settings"]['general']['update_interval']
+MONITOR_ALL = config["settings"]['general']['monitor_all']
 USC_TERM = config["settings"]['usc']['term']
 USC_USERNAME = config["settings"]['usc']['usc_username']
 USC_PASSWORD = config["settings"]['usc']['usc_password']
@@ -327,7 +328,7 @@ def main():
                         if monitored_courses[i].section == dropped:
                             monitored_courses.pop(i)
 
-        if content:
+        if content and MONITOR_ALL:
             if MODE == "smtp" or MODE == "both":
                 send_email(content, SMTP_FROM, SMTP_TO, "Status Change - USC Webreg Helper")
             if MODE == "ifttt" or MODE == "both":
