@@ -109,7 +109,7 @@ def land_in_coursebin():
     button.click()
     
     WebDriverWait(browser, 10).until(ec.visibility_of_element_located((By.CLASS_NAME, 'main')))
-    pushButton = browser.find_element(By.CLASS_NAME, 'auth-button positive')
+    pushButton = browser.find_element(By.CLASS_NAME, 'auth-button')
     pushButton.click()
                                                                        
     WebDriverWait(browser, 10).until(ec.visibility_of_element_located((By.CLASS_NAME, 'service-header')))
