@@ -94,9 +94,9 @@ def land_in_coursebin():
     chrome_bin = os.environ.get("GOOGLE_CHROME_BIN")
     if chrome_bin:
         chrome_options.binary_location = chrome_bin
-    # chrome_options.add_argument("--headless")
-    # chrome_options.add_argument("--disable-gpu")
-    # chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--remote-debugging-port=9222")
     browser = webdriver.Chrome(options=chrome_options)
     browser.get('https://my.usc.edu/')
