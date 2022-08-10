@@ -108,11 +108,11 @@ def land_in_coursebin():
     button = browser.find_element_by_name('_eventId_proceed')
     button.click()
     
-    WebDriverWait(browser, 10).until(ec.visibility_of_element_located((By.CLASS_NAME, 'main')))
-    pushButton = browser.find_element(By.CLASS_NAME, 'auth-button')
+    WebDriverWait(browser, 10).until(ec.visibility_of_element_located((By.CLASS_NAME, 'positive')))
+    pushButton = browser.find_element(By.CLASS_NAME, 'positive')
     pushButton.click()
                                                                        
-    WebDriverWait(browser, 10).until(ec.visibility_of_element_located((By.CLASS_NAME, 'service-header')))
+    WebDriverWait(browser, 20).until(ec.visibility_of_element_located((By.CLASS_NAME, 'service-header')))
     browser.get('https://my.usc.edu/portal/oasis/webregbridge.php')
     browser.get('https://webreg.usc.edu/Terms/termSelect?term=' + USC_TERM)
     browser.get('https://webreg.usc.edu/myCourseBin')
