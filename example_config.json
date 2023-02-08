@@ -1,0 +1,52 @@
+{
+  "settings": {
+    "general": {
+      "mode": "smtp",
+      "update_interval": 20,
+      "monitor_all": false
+    },
+    "usc": {
+      "term": "20231",
+      "usc_username": "xxxxxx",
+      "usc_password": "xxxxxx"
+    },
+    "smtp": {
+      "server": "email-smtp.us-west-2.amazonaws.com",
+      "port": 465,
+      "user": "xxxxxx",
+      "password": "xxxxxx",
+      "from": "abc@gmail.com",
+      "to": "def@gmail.edu"
+    },
+    "ifttt": {
+      "event_name": "xxxxxx",
+      "key": "xxxxxx"
+    }
+  },
+  "sections_to_monitor": ["50010", "50011"],
+  "people_sections_dic": {
+    "def@gmail.edu": ["50010", "50011"]
+  },
+  "recipes_to_enroll": [
+    {
+      "name": "recipe1",
+      "conditions": {
+        "open": [
+          "50010"
+        ],
+        "closed": [],
+        "registered": [],
+        "not_registered": [
+          "50010"
+        ]
+      },
+      "action": {
+        "register": [
+          "50010"
+        ],
+        "drop": []
+      }
+    }
+  ]
+
+}
