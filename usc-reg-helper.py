@@ -14,9 +14,14 @@ import time
 import re
 import json
 
+# Load config from local file
+# f = open('example_config.json')
+# config = json.loads(f.read())
+
+# Load config from environment variable
 config = json.loads(os.environ.get("CONFIG"))
 
-# Configuration
+# Configuration - see example_config.json for more details
 MODE = config["settings"]['general']['mode']
 UPDATE_INTERVAL = config["settings"]['general']['update_interval']
 MONITOR_ALL = config["settings"]['general']['monitor_all']
@@ -31,11 +36,11 @@ SMTP_USERNAME = config["settings"]['smtp']['user']
 SMTP_PASSWORD = config["settings"]['smtp']['password']
 SMTP_FROM = config["settings"]['smtp']['from']
 SMTP_TO = [config["settings"]['smtp']['to']]
-SECTIONS_TO_MONITOR = set(config['sections_to_monitor'])
+SECTIONS_TO_MONITOR = set(config['sections_to_monitor']) # If only wants to be notified when sections open
 SECTIONS_TO_ENROLL = []
 
 print("---------- Recipes -----------")
-for recipe in config['recipes_to_enroll']:
+for recipe in config['recipes_to_enroll']: # If want to automatically enroll and/or drop sections
     SECTIONS_TO_ENROLL += recipe['conditions'].get('open', [])
     SECTIONS_TO_ENROLL += recipe['conditions'].get('closed', [])
     SECTIONS_TO_ENROLL += recipe['conditions'].get('registered', [])
